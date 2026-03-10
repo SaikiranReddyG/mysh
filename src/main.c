@@ -69,9 +69,19 @@ void repl(void)
                 pid = execute_command(&pipeline->commands[0]);
             }
 
-            /* If foreground, wait for completion */
-            if (pid > 0 && !pipeline->commands[pipeline->num_commands - 1].bg_flag) {
-                waitpid(pid, NULL, 0);
+            /* Check if running in background */
+            int is_background = pipeline->commands[pipeline->num_commands - 1].bg_flag;
+
+            if (pid > 0) {
+                if (is_background) {
+                    /* Background: add to job list and don't wait */
+                    add_job(pid, JOB_RUNNING, buffer);
+                    printf("[%d] %d\n", get_job_count(), pid);
+                }
+                else {
+                    /* Foreground: wait for completion */
+                    waitpid(pid, NULL, 0);
+                }
             }
         }
 

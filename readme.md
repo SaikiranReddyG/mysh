@@ -49,15 +49,15 @@ mysh/
 
 | Phase | Module(s) | Status | % Done | Key Learnings | Date |
 |-------|-----------|--------|--------|---------------|------|
-| 1 | shell.h, .gitignore, README | NOT STARTED | 0% | — | — |
-| 2 | parser.c, main.c (REPL) | NOT STARTED | 0% | — | — |
-| 3 | executor.c (fork/exec) | NOT STARTED | 0% | — | — |
-| 4 | builtins.c (cd, exit) | NOT STARTED | 0% | — | — |
-| 5 | redirect.c, pipes.c | NOT STARTED | 0% | — | — |
-| 6 | signals.c, jobs.c, builtins (complete) | NOT STARTED | 0% | — | — |
-| 7 | Pipe integration | NOT STARTED | 0% | — | — |
-| 8 | Makefile | NOT STARTED | 0% | — | — |
-| 9 | Documentation & polish | NOT STARTED | 0% | — | — |
+| 1 | shell.h, .gitignore, README | ✅ COMPLETE | 100% | Comprehensive header design with structs/constants/declarations for 8 modules | Mar 10 |
+| 2 | parser.c, main.c (REPL) | ✅ COMPLETE | 100% | Pipe/redirect/background tokenization using strtok_r; critical bug fix for argv memory | Mar 10 |
+| 3 | executor.c (fork/exec) | ✅ COMPLETE | 100% | Fork/exec pattern, proper NULL terminator, process waiting logic | Mar 10 |
+| 4 | builtins.c (cd, exit) | ✅ COMPLETE | 100% | chdir(), atoi(), is_builtin() checks before executor | Mar 10 |
+| 5 | redirect.c, pipes.c | ✅ WORKING | 90% | File I/O with open()/dup2(), multi-command pipe wiring, loop bound fixes | Mar 10 |
+| 6 | signals.c, jobs.c, builtins (complete) | 🔄 IN PROGRESS | 50% | SIGCHLD handler, job list tracking, bg job support in main.c | Mar 10 |
+| 7 | Pipe integration | ✅ COMPLETE | 100% | execute_pipeline already integrated in executor | Mar 10 |
+| 8 | Makefile | ✅ COMPLETE | 100% | Build system with debug/clean targets | Mar 10 |
+| 9 | Documentation & polish | 📝 IN PROGRESS | 10% | This progress table; still needs final review | Mar 10 |
 
 ## How to Use
 
