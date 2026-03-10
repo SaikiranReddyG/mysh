@@ -74,9 +74,10 @@ static Redirect *parse_redirects(char **argv, int *argc, int *num_redirects)
             count++;
 
             /* Remove both > and filename from argv */
-            for (int j = i; j < *argc - 2; j++) {
+            for (int j = i; j + 2 <= *argc; j++) {
                 argv[j] = argv[j + 2];
             }
+            argv[*argc - 2] = NULL;
             *argc -= 2;
         }
         else if (strcmp(arg, ">>") == 0) {
@@ -91,9 +92,10 @@ static Redirect *parse_redirects(char **argv, int *argc, int *num_redirects)
             redirects[count].filename = strdup(argv[i + 1]);
             count++;
 
-            for (int j = i; j < *argc - 2; j++) {
+            for (int j = i; j + 2 <= *argc; j++) {
                 argv[j] = argv[j + 2];
             }
+            argv[*argc - 2] = NULL;
             *argc -= 2;
         }
         else if (strcmp(arg, "<") == 0) {
@@ -108,9 +110,10 @@ static Redirect *parse_redirects(char **argv, int *argc, int *num_redirects)
             redirects[count].filename = strdup(argv[i + 1]);
             count++;
 
-            for (int j = i; j < *argc - 2; j++) {
+            for (int j = i; j + 2 <= *argc; j++) {
                 argv[j] = argv[j + 2];
             }
+            argv[*argc - 2] = NULL;
             *argc -= 2;
         }
         else if (strcmp(arg, "2>") == 0) {
@@ -125,9 +128,10 @@ static Redirect *parse_redirects(char **argv, int *argc, int *num_redirects)
             redirects[count].filename = strdup(argv[i + 1]);
             count++;
 
-            for (int j = i; j < *argc - 2; j++) {
+            for (int j = i; j + 2 <= *argc; j++) {
                 argv[j] = argv[j + 2];
             }
+            argv[*argc - 2] = NULL;
             *argc -= 2;
         }
         else {
