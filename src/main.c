@@ -47,6 +47,9 @@ void repl(void)
             continue;
         }
 
+        /* Add to history */
+        history_add(buffer);
+
         /* Check if first command is a builtin */
         if (pipeline->num_commands == 1 && 
             is_builtin(pipeline->commands[0].argv[0])) {

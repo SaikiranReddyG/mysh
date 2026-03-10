@@ -164,6 +164,11 @@ int builtin_bg(char **args);
  */
 void builtin_history(void);
 
+/**
+ * history_add() - Add a command to the command history
+ */
+void history_add(const char *cmd);
+
 /* -------- redirect.c -------- */
 /**
  * apply_redirects() - Apply all redirections to current process file descriptors
