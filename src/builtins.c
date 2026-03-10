@@ -1,5 +1,29 @@
 #include "shell.h"
 
+/* Command history buffer */
+static char history[MAX_HISTORY][MAX_INPUT];
+static int history_count = 0;
+
+/**
+ * add_to_history() - Add a command to the history buffer
+ */
+static void add_to_history(const char *cmd)
+{
+    if (history_count < MAX_HISTORY) {
+        strncpy(history[history_count], cmd, MAX_INPUT - 1);
+        history[history_count][MAX_INPUT - 1] = '\0';
+        history_count++;
+    }
+    else {
+        /* Rotate: remove oldest, add newest */
+        for (int i = 0; i < MAX_HISTORY - 1; i++) {
+            strcpy(history[i], history[i + 1]);
+        }
+        strncpy(history[MAX_HISTORY - 1], cmd, MAX_INPUT - 1);
+        history[MAX_HISTORY - 1][MAX_INPUT - 1] = '\0';
+    }
+}
+
 int is_builtin(const char *cmd)
 {
     if (!cmd) return 0;
@@ -85,7 +109,7 @@ void builtin_jobs(void)
     int count = get_job_count();
 
     if (count == 0) {
-        printf("No jobs\n");
+        printf("(no jobs)\n");
         return;
     }
 
@@ -98,20 +122,81 @@ void builtin_jobs(void)
 
 int builtin_fg(char **args)
 {
-    (void)args; /* TODO: Implement */
-    printf("fg: not yet implemented\n");
+    if (args[1] == NULL) {
+        fprintf(stderr, "fg: usage: fg [job_id]\n");
+        return -1;
+    }
+
+    int job_id = atoi(args[1]);
+    Job *job = find_job_by_id(job_id);
+
+    if (!job) {
+        fprintf(stderr, "fg: job %d not found\n", job_id);
+        return -1;
+    }
+
+    /* Bring job to foreground and wait */
+    printf("%s\n", job->command);
+    
+    /* Resume if stopped */
+    if (job->state == JOB_STOPPED) {
+        kill(job->pid, SIGCONT);
+    }
+
+    /* Wait for job to finish */
+    int status;
+    waitpid(job->pid, &status, 0);
+
+    /* Remove from job list */
+    remove_job(job->pid);
+    
     return 0;
 }
 
 int builtin_bg(char **args)
 {
-    (void)args; /* TODO: Implement */
-    printf("bg: not yet implemented\n");
+    if (args[1] == NULL) {
+        fprintf(stderr, "bg: usage: bg [job_id]\n");
+        return -1;
+    }
+
+    int job_id = atoi(args[1]);
+    Job *job = find_job_by_id(job_id);
+
+    if (!job) {
+        fprintf(stderr, "bg: job %d not found\n", job_id);
+        return -1;
+    }
+
+    if (job->state != JOB_STOPPED) {
+        fprintf(stderr, "bg: job %d is not stopped\n", job_id);
+        return -1;
+    }
+
+    /* Resume in background */
+    if (kill(job->pid, SIGCONT) != 0) {
+        perror("kill");
+        return -1;
+    }
+
+    job->state = JOB_RUNNING;
+    printf("[%d]\t%s\n", job->job_id, job->command);
+    
     return 0;
 }
 
 void builtin_history(void)
 {
-    /* TODO: Implement */
-    printf("history: not yet implemented\n");
+    printf("Command history (last %d commands):\n", history_count);
+    for (int i = 0; i < history_count; i++) {
+        printf("%3d: %s\n", i + 1, history[i]);
+    }
+}
+
+/**
+ * history_add() - Add command to history (called from main.c)
+ */
+void history_add(const char *cmd)
+{
+    add_to_history(cmd);
 }
