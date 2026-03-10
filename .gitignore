@@ -1,2 +1,21 @@
+# Compiled artifacts
+*.o
 mysh
 src/main
+
+# Core dumps
+core
+vgcore.*
+
+# Editor and IDE files
+.vscode/
+.DS_Store
+*.swp
+*.swo
+*~
+.idea/
+*.code-workspace
+
+# Build artifacts
+*.a
+*.so
