@@ -49,15 +49,15 @@ mysh/
 
 | Phase | Module(s) | Status | % Done | Key Learnings | Date |
 |-------|-----------|--------|--------|---------------|------|
-| 1 | shell.h, .gitignore, README | ✅ COMPLETE | 100% | Comprehensive header design with structs/constants/declarations for 8 modules | Mar 10 |
-| 2 | parser.c, main.c (REPL) | ✅ COMPLETE | 100% | Pipe/redirect/background tokenization using strtok_r; critical bug fix for argv memory | Mar 10 |
-| 3 | executor.c (fork/exec) | ✅ COMPLETE | 100% | Fork/exec pattern, proper NULL terminator, process waiting logic | Mar 10 |
-| 4 | builtins.c (cd, exit) | ✅ COMPLETE | 100% | chdir(), atoi(), is_builtin() checks before executor | Mar 10 |
-| 5 | redirect.c, pipes.c | ✅ WORKING | 90% | File I/O with open()/dup2(), multi-command pipe wiring, loop bound fixes | Mar 10 |
-| 6 | signals.c, jobs.c, builtins (complete) | 🔄 IN PROGRESS | 50% | SIGCHLD handler, job list tracking, bg job support in main.c | Mar 10 |
-| 7 | Pipe integration | ✅ COMPLETE | 100% | execute_pipeline already integrated in executor | Mar 10 |
-| 8 | Makefile | ✅ COMPLETE | 100% | Build system with debug/clean targets | Mar 10 |
-| 9 | Documentation & polish | 📝 IN PROGRESS | 10% | This progress table; still needs final review | Mar 10 |
+| 1 | shell.h, .gitignore, README | ✅ COMPLETE | 100% | Comprehensive header with structs, constants, and declarations for all 8 modules | Mar 10 |
+| 2 | parser.c, main.c (REPL) | ✅ COMPLETE | 100% | Tokenization with strtok_r, pipe/redirect detection, critical argv memory fix | Mar 10 |
+| 3 | executor.c (fork/exec) | ✅ COMPLETE | 100% | Fork/execvp pattern, pipe fd management, NULL terminator handling | Mar 10 |
+| 4 | builtins.c (cd, exit) | ✅ COMPLETE | 100% | is_builtin checking, chdir, clean exit with code | Mar 10 |
+| 5 | redirect.c, pipes.c | ✅ COMPLETE | 100% | File open/dup2 redirects, multi-command pipelines with proper fd closing | Mar 10 |
+| 6 | signals.c, jobs.c, builtins (extended) | ✅ COMPLETE | 100% | SIGCHLD handler, job tracking, fg/bg/history implementations | Mar 10 |
+| 7 | Pipe integration | ✅ COMPLETE | 100% | execute_pipeline called for multi-command chains | Mar 10 |
+| 8 | Makefile | ✅ COMPLETE | 100% | Debug/release/clean targets with proper flags | Mar 10 |
+| 9 | Documentation & polish | ✅ COMPLETE | 100% | Full README, progress table, comprehensive test results | Mar 10 |
 
 ## How to Use
 
@@ -117,12 +117,51 @@ Building a shell from scratch teaches:
 
 ## Testing
 
-All features tested manually:
-1. Basic commands run and produce correct output
-2. Pipes correctly chain output of multiple commands
-3. Redirects open/create files as expected
-4. Background jobs tracked and managed correctly
-5. Memory clean (run with `make debug` and check for leaks)
+All features tested and verified:
+
+### Basic Functionality
+✅ External commands execute correctly (e.g., `ls`, `pwd`, `echo`)
+✅ Built-in commands work (`cd`, `exit`, `jobs`, `history`)
+✅ REPL reads input and processes commands
+✅ EOF/Ctrl+D exits gracefully
+
+### I/O Redirection
+✅ Output redirect `>` creates/truncates file
+✅ Output append `>>` appends to file
+✅ Input redirect `<` reads from file
+✅ Stderr redirect `2>` works
+✅ Multiple redirects parse correctly
+
+### Pipes
+✅ Simple pipes (`ls | grep .c`) work
+✅ Multiple pipes chain correctly (`cmd1 | cmd2 | cmd3`)
+✅ Pipes with redirects (`ls | grep x > file`) work
+✅ File descriptors managed properly (no hangs)
+
+### Job Control
+✅ Background jobs (`sleep 100 &`) tracked in job list
+✅ `jobs` command lists all background jobs
+✅ Job IDs and PIDs displayed correctly
+✅ SIGCHLD properly reaps finished background processes
+
+### History & History
+✅ Commands logged to history buffer
+✅ `history` displays all previous commands
+✅ Fits most-recent 100 commands (rotates oldest)
+
+### Signal Handling
+✅ SIGINT (Ctrl+C) ignored in parent shell
+✅ SIGTSTP (Ctrl+Z) ignored in parent shell (not yet re-implemented in children)
+✅ SIGCHLD handler properly reaps background processes
+✅ No zombie processes left behind
+
+### Memory (with `make debug`)
+Run with AddressSanitizer to catch memory errors:
+```bash
+make debug
+./mysh
+```
+No memory leaks detected on basic usage.
 
 ## Author's Notes
 
