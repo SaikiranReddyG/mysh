@@ -1,6 +1,9 @@
 #ifndef SHELL_H
 #define SHELL_H
 
+/* Enable POSIX features like strtok_r */
+#define _POSIX_C_SOURCE 200809L
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
