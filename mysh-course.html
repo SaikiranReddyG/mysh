@@ -1,0 +1,2355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mysh: How Unix Shells Actually Work</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400;1,9..40,500&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      /* --- BACKGROUNDS --- */
+      --color-bg: #FAF7F2;
+      --color-bg-warm: #F5F0E8;
+      --color-bg-code: #1E1E2E;
+      --color-text: #2C2A28;
+      --color-text-secondary: #6B6560;
+      --color-text-muted: #9E9790;
+      --color-border: #E5DFD6;
+      --color-border-light: #EEEBE5;
+      --color-surface: #FFFFFF;
+      --color-surface-warm: #FDF9F3;
+
+      /* --- ACCENT --- */
+      --color-accent: #D94F30;
+      --color-accent-hover: #C4432A;
+      --color-accent-light: #FDEEE9;
+      --color-accent-muted: #E8836C;
+
+      /* --- SEMANTIC --- */
+      --color-success: #2D8B55;
+      --color-success-light: #E8F5EE;
+      --color-error: #C93B3B;
+      --color-error-light: #FDE8E8;
+      --color-info: #2A7B9B;
+      --color-info-light: #E4F2F7;
+
+      /* --- ACTOR COLORS --- */
+      --color-actor-1: #D94F30;
+      --color-actor-2: #2A7B9B;
+      --color-actor-3: #7B6DAA;
+      --color-actor-4: #D4A843;
+      --color-actor-5: #2D8B55;
+
+      /* --- FONTS --- */
+      --font-display: 'Bricolage Grotesque', Georgia, serif;
+      --font-body: 'DM Sans', -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+
+      /* --- TYPE SCALE --- */
+      --text-xs: 0.75rem;
+      --text-sm: 0.875rem;
+      --text-base: 1rem;
+      --text-lg: 1.125rem;
+      --text-xl: 1.25rem;
+      --text-2xl: 1.5rem;
+      --text-3xl: 1.875rem;
+      --text-4xl: 2.25rem;
+      --text-5xl: 3rem;
+      --text-6xl: 3.75rem;
+
+      /* --- LINE HEIGHTS --- */
+      --leading-tight: 1.15;
+      --leading-snug: 1.3;
+      --leading-normal: 1.6;
+      --leading-loose: 1.8;
+
+      /* --- SPACING --- */
+      --space-1: 0.25rem;
+      --space-2: 0.5rem;
+      --space-3: 0.75rem;
+      --space-4: 1rem;
+      --space-5: 1.25rem;
+      --space-6: 1.5rem;
+      --space-8: 2rem;
+      --space-10: 2.5rem;
+      --space-12: 3rem;
+      --space-16: 4rem;
+      --space-20: 5rem;
+      --space-24: 6rem;
+
+      --content-width: 800px;
+      --content-width-wide: 1000px;
+      --nav-height: 50px;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --radius-full: 9999px;
+
+      /* --- SHADOWS --- */
+      --shadow-sm: 0 1px 2px rgba(44, 42, 40, 0.05);
+      --shadow-md: 0 4px 12px rgba(44, 42, 40, 0.08);
+      --shadow-lg: 0 8px 24px rgba(44, 42, 40, 0.1);
+      --shadow-xl: 0 16px 48px rgba(44, 42, 40, 0.12);
+
+      /* --- ANIMATIONS --- */
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+      --duration-fast: 150ms;
+      --duration-normal: 300ms;
+      --duration-slow: 500ms;
+      --stagger-delay: 120ms;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-snap-type: y proximity;
+      scroll-behavior: smooth;
+    }
+
+    body {
+      background: var(--color-bg);
+      background-image: radial-gradient(
+        ellipse at 20% 50%,
+        rgba(217, 79, 48, 0.03) 0%,
+        transparent 50%
+      );
+      color: var(--color-text);
+      font-family: var(--font-body);
+      line-height: var(--leading-normal);
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--color-border);
+      border-radius: var(--radius-full);
+    }
+
+    /* --- NAVIGATION --- */
+    nav.nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: var(--nav-height);
+      background: var(--color-surface);
+      box-shadow: var(--shadow-md);
+      z-index: 999;
+      display: flex;
+    }
+
+    .progress-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      height: 3px;
+      background: var(--color-accent);
+      width: 0%;
+      transition: width 0.1s linear;
+    }
+
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 0 var(--space-4);
+    }
+
+    .nav-title {
+      font-family: var(--font-display);
+      font-weight: 700;
+      font-size: var(--text-lg);
+      color: var(--color-accent);
+    }
+
+    .nav-dots {
+      display: flex;
+      gap: var(--space-3);
+      align-items: center;
+    }
+
+    .nav-dot {
+      width: 12px;
+      height: 12px;
+      border: 2px solid var(--color-text-muted);
+      border-radius: 50%;
+      background: transparent;
+      cursor: pointer;
+      transition: all var(--duration-fast);
+    }
+
+    .nav-dot.current {
+      border-color: var(--color-accent);
+      background: var(--color-accent);
+      box-shadow: 0 0 10px rgba(217, 79, 48, 0.3);
+    }
+
+    .nav-dot.visited {
+      background: var(--color-accent);
+      border-color: var(--color-accent);
+    }
+
+    /* --- MODULES --- */
+    .module {
+      min-height: 100dvh;
+      scroll-snap-align: start;
+      padding: var(--space-16) var(--space-6);
+      padding-top: calc(var(--nav-height) + var(--space-12));
+    }
+
+    .module:nth-child(1) { background: var(--color-bg); }
+    .module:nth-child(2) { background: var(--color-bg-warm); }
+    .module:nth-child(3) { background: var(--color-bg); }
+    .module:nth-child(4) { background: var(--color-bg-warm); }
+    .module:nth-child(5) { background: var(--color-bg); }
+    .module:nth-child(6) { background: var(--color-bg-warm); }
+    .module:nth-child(7) { background: var(--color-bg); }
+    .module:nth-child(8) { background: var(--color-bg-warm); }
+
+    .module-content {
+      max-width: var(--content-width);
+      margin: 0 auto;
+    }
+
+    .module-header {
+      margin-bottom: var(--space-12);
+    }
+
+    .module-number {
+      font-family: var(--font-display);
+      font-size: var(--text-6xl);
+      font-weight: 800;
+      color: var(--color-accent);
+      opacity: 0.15;
+      display: block;
+    }
+
+    .module-title {
+      font-family: var(--font-display);
+      font-size: var(--text-4xl);
+      font-weight: 700;
+      margin: var(--space-3) 0;
+      line-height: var(--leading-tight);
+    }
+
+    .module-subtitle {
+      font-size: var(--text-lg);
+      color: var(--color-text-secondary);
+      margin: 0;
+    }
+
+    /* --- SCREENS --- */
+    .screen {
+      margin-bottom: var(--space-12);
+    }
+
+    .screen-heading {
+      font-family: var(--font-display);
+      font-size: var(--text-2xl);
+      font-weight: 600;
+      margin-bottom: var(--space-6);
+      line-height: var(--leading-snug);
+    }
+
+    .screen p {
+      margin-bottom: var(--space-4);
+      font-size: var(--text-base);
+    }
+
+    /* --- ANIMATIONS --- */
+    .animate-in {
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity var(--duration-slow) var(--ease-out),
+                  transform var(--duration-slow) var(--ease-out);
+    }
+
+    .animate-in.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* --- CODE TRANSLATIONS --- */
+    .translation-block {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      box-shadow: var(--shadow-md);
+      margin: var(--space-8) 0;
+    }
+
+    .translation-code {
+      background: var(--color-bg-code);
+      color: #CDD6F4;
+      padding: var(--space-6);
+      font-family: var(--font-mono);
+      font-size: var(--text-sm);
+      line-height: 1.7;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    .translation-code pre,
+    .translation-code code {
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-x: hidden;
+    }
+
+    .translation-english {
+      background: var(--color-surface-warm);
+      padding: var(--space-6);
+      font-size: var(--text-sm);
+      line-height: 1.7;
+      border-left: 3px solid var(--color-accent);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .translation-label {
+      position: absolute;
+      top: var(--space-2);
+      right: var(--space-3);
+      font-size: var(--text-xs);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      opacity: 0.5;
+      font-family: var(--font-mono);
+    }
+
+    .translation-english .translation-label {
+      color: var(--color-text-muted);
+    }
+
+    .tl {
+      margin: var(--space-3) 0;
+    }
+
+    .code-keyword { color: #CBA6F7; }
+    .code-string { color: #A6E3A1; }
+    .code-function { color: #89B4FA; }
+    .code-comment { color: #6C7086; }
+    .code-number { color: #FAB387; }
+    .code-property { color: #F9E2AF; }
+    .code-operator { color: #94E2D5; }
+
+    /* --- CALLOUT BOXES --- */
+    .callout {
+      display: flex;
+      gap: var(--space-4);
+      padding: var(--space-5) var(--space-6);
+      border-radius: var(--radius-md);
+      margin: var(--space-8) 0;
+      border-left: 4px solid;
+    }
+
+    .callout-accent {
+      background: var(--color-accent-light);
+      border-left-color: var(--color-accent);
+    }
+
+    .callout-info {
+      background: var(--color-info-light);
+      border-left-color: var(--color-info);
+    }
+
+    .callout-warning {
+      background: var(--color-error-light);
+      border-left-color: var(--color-error);
+    }
+
+    .callout-icon {
+      font-size: 1.5rem;
+      flex-shrink: 0;
+    }
+
+    .callout-title {
+      display: block;
+      margin-bottom: var(--space-2);
+    }
+
+    .callout-content p {
+      margin: 0;
+    }
+
+    /* --- PATTERN CARDS --- */
+    .pattern-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: var(--space-4);
+      margin: var(--space-8) 0;
+    }
+
+    .pattern-card {
+      background: var(--color-surface);
+      border-radius: var(--radius-md);
+      padding: var(--space-6);
+      box-shadow: var(--shadow-sm);
+      border-top: 3px solid;
+      transition: transform var(--duration-normal) var(--ease-out), box-shadow var(--duration-normal);
+    }
+
+    .pattern-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .pattern-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      color: white;
+      margin-bottom: var(--space-3);
+    }
+
+    .pattern-title {
+      font-family: var(--font-display);
+      font-weight: 600;
+      margin-bottom: var(--space-2);
+    }
+
+    .pattern-desc {
+      font-size: var(--text-sm);
+      color: var(--color-text-secondary);
+      margin: 0;
+    }
+
+    /* --- STEP CARDS --- */
+    .step-cards {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+      margin: var(--space-8) 0;
+    }
+
+    .step-card {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-4);
+      padding: var(--space-4) var(--space-5);
+      background: var(--color-surface);
+      border-radius: var(--radius-md);
+      border-left: 3px solid var(--color-accent);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .step-num {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--color-accent);
+      color: white;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: var(--font-display);
+      flex-shrink: 0;
+    }
+
+    .step-body strong {
+      display: block;
+      margin-bottom: var(--space-1);
+    }
+
+    .step-body p {
+      margin: 0;
+      font-size: var(--text-sm);
+      color: var(--color-text-secondary);
+    }
+
+    /* --- QUIZZES --- */
+    .quiz-container {
+      margin: var(--space-8) 0;
+    }
+
+    .quiz-question-block {
+      margin-bottom: var(--space-6);
+    }
+
+    .quiz-question {
+      font-family: var(--font-display);
+      font-size: var(--text-lg);
+      font-weight: 600;
+      margin-bottom: var(--space-4);
+    }
+
+    .quiz-options {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-3);
+      margin-bottom: var(--space-4);
+    }
+
+    .quiz-option {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      padding: var(--space-3) var(--space-4);
+      border: 2px solid var(--color-border);
+      border-radius: var(--radius-sm);
+      background: var(--color-surface);
+      cursor: pointer;
+      width: 100%;
+      font-family: var(--font-body);
+      font-size: var(--text-base);
+      transition: border-color var(--duration-fast), background var(--duration-fast);
+    }
+
+    .quiz-option:hover {
+      border-color: var(--color-accent-muted);
+    }
+
+    .quiz-option.selected {
+      border-color: var(--color-accent);
+      background: var(--color-accent-light);
+    }
+
+    .quiz-option.correct {
+      border-color: var(--color-success);
+      background: var(--color-success-light);
+    }
+
+    .quiz-option.incorrect {
+      border-color: var(--color-error);
+      background: var(--color-error-light);
+    }
+
+    .quiz-option-radio {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 2px solid var(--color-border);
+      transition: all var(--duration-fast);
+      flex-shrink: 0;
+    }
+
+    .quiz-option.selected .quiz-option-radio {
+      border-color: var(--color-accent);
+      background: var(--color-accent);
+      box-shadow: inset 0 0 0 3px white;
+    }
+
+    .quiz-feedback {
+      max-height: 0;
+      overflow: hidden;
+      opacity: 0;
+      transition: max-height var(--duration-normal), opacity var(--duration-normal);
+      font-size: var(--text-sm);
+    }
+
+    .quiz-feedback.show {
+      max-height: 200px;
+      opacity: 1;
+      padding: var(--space-3);
+      margin-top: var(--space-2);
+      border-radius: var(--radius-sm);
+    }
+
+    .quiz-feedback.success {
+      background: var(--color-success-light);
+      color: #1a5a3a;
+    }
+
+    .quiz-feedback.error {
+      background: var(--color-error-light);
+      color: #8B0000;
+    }
+
+    .quiz-check-btn, .quiz-reset-btn {
+      padding: var(--space-3) var(--space-6);
+      background: var(--color-accent);
+      color: white;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-family: var(--font-body);
+      font-size: var(--text-base);
+      margin-right: var(--space-3);
+      margin-top: var(--space-4);
+      transition: background var(--duration-fast);
+    }
+
+    .quiz-check-btn:hover {
+      background: var(--color-accent-hover);
+    }
+
+    /* --- ICON ROWS --- */
+    .icon-rows {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+      margin: var(--space-8) 0;
+    }
+
+    .icon-row {
+      display: flex;
+      align-items: center;
+      gap: var(--space-4);
+      padding: var(--space-4);
+      background: var(--color-surface);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .icon-circle {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.25rem;
+      flex-shrink: 0;
+      color: white;
+    }
+
+    .icon-row strong {
+      display: block;
+      margin-bottom: var(--space-1);
+    }
+
+    .icon-row p {
+      margin: 0;
+      color: var(--color-text-secondary);
+      font-size: var(--text-sm);
+    }
+
+    /* --- GLOSSARY TOOLTIPS --- */
+    .term {
+      border-bottom: 1.5px dashed var(--color-accent-muted);
+      cursor: pointer;
+      position: relative;
+    }
+
+    .term:hover {
+      border-bottom-color: var(--color-accent);
+      color: var(--color-accent);
+    }
+
+    .term-tooltip {
+      position: fixed;
+      background: var(--color-bg-code);
+      color: #CDD6F4;
+      padding: var(--space-3) var(--space-4);
+      border-radius: var(--radius-sm);
+      font-size: var(--text-sm);
+      line-height: var(--leading-normal);
+      width: max(200px, min(320px, 80vw));
+      box-shadow: var(--shadow-lg);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity var(--duration-fast);
+      z-index: 10000;
+    }
+
+    .term-tooltip::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 6px solid transparent;
+      border-top-color: var(--color-bg-code);
+    }
+
+    .term-tooltip.visible {
+      opacity: 1;
+    }
+
+    /* --- FLOW DIAGRAM --- */
+    .flow-steps {
+      display: flex;
+      align-items: center;
+      gap: var(--space-4);
+      margin: var(--space-8) 0;
+      flex-wrap: wrap;
+    }
+
+    .flow-step {
+      background: var(--color-surface);
+      border: 2px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: var(--space-4);
+      text-align: center;
+      flex: 0 1 auto;
+      min-width: 120px;
+    }
+
+    .flow-step-num {
+      width: 36px;
+      height: 36px;
+      background: var(--color-accent);
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto var(--space-2);
+      font-weight: 700;
+      font-family: var(--font-display);
+    }
+
+    .flow-step p {
+      margin: 0;
+      font-size: var(--text-sm);
+    }
+
+    .flow-arrow {
+      font-size: 1.5rem;
+      color: var(--color-text-muted);
+    }
+
+    /* --- ARCHITECTURE DIAGRAM --- */
+    .arch-diagram {
+      background: var(--color-surface);
+      border-radius: var(--radius-md);
+      padding: var(--space-8);
+      margin: var(--space-8) 0;
+      box-shadow: var(--shadow-md);
+    }
+
+    .arch-zone {
+      margin-bottom: var(--space-8);
+    }
+
+    .arch-zone:last-child {
+      margin-bottom: 0;
+    }
+
+    .arch-zone-label {
+      font-family: var(--font-display);
+      font-size: var(--text-lg);
+      font-weight: 600;
+      margin-bottom: var(--space-4);
+      color: var(--color-accent);
+    }
+
+    .arch-components {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: var(--space-4);
+    }
+
+    .arch-component {
+      background: var(--color-bg);
+      border: 2px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: var(--space-4);
+      text-align: center;
+      cursor: pointer;
+      transition: border-color var(--duration-fast), box-shadow var(--duration-fast);
+    }
+
+    .arch-component:hover {
+      border-color: var(--color-accent);
+      box-shadow: var(--shadow-md);
+    }
+
+    .arch-component-icon {
+      font-size: 1.75rem;
+      margin-bottom: var(--space-2);
+    }
+
+    .arch-component-name {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: var(--text-sm);
+    }
+
+    .arch-description {
+      background: var(--color-accent-light);
+      border: 1px solid var(--color-accent-muted);
+      border-radius: var(--radius-md);
+      padding: var(--space-4);
+      margin-top: var(--space-6);
+      font-size: var(--text-sm);
+      color: var(--color-text);
+      min-height: 60px;
+      display: flex;
+      align-items: center;
+    }
+
+    /* --- RESPONSIVE --- */
+    @media (max-width: 768px) {
+      :root {
+        --text-4xl: 1.875rem;
+        --text-5xl: 2.25rem;
+        --text-6xl: 3rem;
+      }
+
+      .translation-block {
+        grid-template-columns: 1fr;
+      }
+
+      .translation-english {
+        border-left: none;
+        border-top: 3px solid var(--color-accent);
+      }
+
+      .pattern-cards {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .flow-steps {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .flow-arrow {
+        transform: rotate(90deg);
+        text-align: center;
+      }
+
+      .nav-dots {
+        display: none;
+      }
+    }
+
+    @media (max-width: 480px) {
+      :root {
+        --text-4xl: 1.5rem;
+        --text-5xl: 1.875rem;
+        --text-6xl: 2.25rem;
+      }
+
+      .module {
+        padding: var(--space-8) var(--space-4);
+      }
+
+      .pattern-cards {
+        grid-template-columns: 1fr;
+      }
+
+      .icon-row {
+        flex-direction: column;
+        text-align: center;
+      }
+
+      .icon-circle {
+        margin: 0 auto;
+      }
+
+      .nav-title {
+        font-size: var(--text-xs);
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="progress-bar" role="progressbar"></div>
+    <div class="nav-inner">
+      <span class="nav-title">mysh: Unix Shells Uncovered</span>
+      <div class="nav-dots" id="nav-dots"></div>
+    </div>
+  </nav>
+
+  <main id="course">
+    <!-- MODULE 1: What is mysh? -->
+    <section class="module" id="module-1" style="background: var(--color-bg)">
+      <div class="module-content">
+        <header class="module-header animate-in">
+          <span class="module-number">01</span>
+          <h1 class="module-title">What is mysh? The Shell as an Orchestra Conductor</h1>
+          <p class="module-subtitle">Understanding what shells do and why building one teaches you about the Unix philosophy</p>
+        </header>
+
+        <div class="module-body">
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Meet the Shell: Your Computer's Concierge</h2>
+            <p>When you open a terminal and type <code>ls</code>, you're not directly talking to your computer. You're talking to a <span class="term" data-definition="The shell is a program that reads your commands, figures out what they mean, and tells the operating system what to do. It's the middleman between you and the machine.">shell</span>.</p>
+            <p>The shell is like a concierge at a fancy hotel. You ask for something in English ("show me the files"). The concierge doesn't do the work themselves—they find the right department ("the file listing department"), tell them what you want, wait for the result, and bring it back to you.</p>
+            <p>mysh is a shell. It's a working implementation of this concierge, built from scratch in C using only raw <span class="term" data-definition="System calls (syscalls) are requests your program makes to the operating system to do something that needs special permission, like creating a new process or reading a file.">system calls</span>.</p>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">What Shells Actually Do</h2>
+            <div class="icon-rows">
+              <div class="icon-row">
+                <div class="icon-circle" style="background: var(--color-actor-1)">📝</div>
+                <div>
+                  <strong>Read</strong>
+                  <p>Wait for you to type a command</p>
+                </div>
+              </div>
+              <div class="icon-row">
+                <div class="icon-circle" style="background: var(--color-actor-2)">⚙️</div>
+                <div>
+                  <strong>Parse</strong>
+                  <p>Break the command into pieces (program name, arguments, pipes, redirects)</p>
+                </div>
+              </div>
+              <div class="icon-row">
+                <div class="icon-circle" style="background: var(--color-actor-3)">🚀</div>
+                <div>
+                  <strong>Execute</strong>
+                  <p>Start the program and let it run</p>
+                </div>
+              </div>
+              <div class="icon-row">
+                <div class="icon-circle" style="background: var(--color-actor-4)">📊</div>
+                <div>
+                  <strong>Output</strong>
+                  <p>Show you the results, then wait for the next command</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Why You Should Care About Shells</h2>
+            <div class="callout callout-accent">
+              <div class="callout-icon">💡</div>
+              <div class="callout-content">
+                <strong class="callout-title">It's Not Just About Running Commands</strong>
+                <p>Shells teach you how your computer actually works. Understanding processes, file descriptors, signals, and job control isn't shell-specific — it's the foundation of all systems programming. When you understand mysh, you understand the operating system.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">A Real Example: What Happens When You Type</h2>
+            <p>Imagine you type: <code>ls | grep .c</code></p>
+            <p>Here's what happens under the hood:</p>
+            <div class="step-cards">
+              <div class="step-card">
+                <div class="step-num">1</div>
+                <div class="step-body">
+                  <strong>Parse the input</strong>
+                  <p>Shell reads the command and sees two programs: <code>ls</code> and <code>grep</code>, connected by a pipe (<code>|</code>)</p>
+                </div>
+              </div>
+              <div class="step-card">
+                <div class="step-num">2</div>
+                <div class="step-body">
+                  <strong>Create a pipe</strong>
+                  <p>Shell makes a communication channel — a pipe — that will connect ls's output to grep's input</p>
+                </div>
+              </div>
+              <div class="step-card">
+                <div class="step-num">3</div>
+                <div class="step-body">
+                  <strong>Fork twice</strong>
+                  <p>Shell creates two child processes: one for ls, one for grep</p>
+                </div>
+              </div>
+              <div class="step-card">
+                <div class="step-num">4</div>
+                <div class="step-body">
+                  <strong>Connect the pipes</strong>
+                  <p>ls's stdout is connected to the pipe, grep's stdin is connected to the pipe</p>
+                </div>
+              </div>
+              <div class="step-card">
+                <div class="step-num">5</div>
+                <div class="step-body">
+                  <strong>Execute</strong>
+                  <p>Both programs run. ls outputs file names, grep filters them, and you see only .c files</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Module 1 Quiz: Do You Understand What Shells Do?</h2>
+            <div class="quiz-container" id="quiz-1">
+              <div class="quiz-question-block" data-question="q1" data-correct="option-b">
+                <h3 class="quiz-question">When you type `./mysh` and see `mysh>`, what just happened?</h3>
+                <div class="quiz-options">
+                  <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>Your computer deleted the shell and ran a new one</span>
+                  </button>
+                  <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>The shell process started and is now waiting for your command</span>
+                  </button>
+                  <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>The shell automatically ran ls to show you what's in the directory</span>
+                  </button>
+                </div>
+                <div class="quiz-feedback" id="q1-feedback"></div>
+              </div>
+
+              <div class="quiz-question-block" data-question="q2" data-correct="option-a">
+                <h3 class="quiz-question">Why is a shell called a "shell"?</h3>
+                <div class="quiz-options">
+                  <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>Because it wraps around the operating system — you interact with the shell, which talks to the OS</span>
+                  </button>
+                  <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>Because it looks like a shell at the beach</span>
+                  </button>
+                  <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>It's named after the first programmer who built one</span>
+                  </button>
+                </div>
+                <div class="quiz-feedback" id="q2-feedback"></div>
+              </div>
+
+              <button class="quiz-check-btn" onclick="checkQuiz('quiz-1')">Check Answers</button>
+              <button class="quiz-reset-btn" onclick="resetQuiz('quiz-1')">Try Again</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <!-- MODULE 2: Meet the Actors -->
+    <section class="module" id="module-2" style="background: var(--color-bg-warm)">
+      <div class="module-content">
+        <header class="module-header animate-in">
+          <span class="module-number">02</span>
+          <h1 class="module-title">Meet the Cast of Characters</h1>
+          <p class="module-subtitle">Each piece of mysh has a specific job. Understanding who does what helps you steer AI and debug problems.</p>
+        </header>
+
+        <div class="module-body">
+          <section class="screen animate-in">
+            <h2 class="screen-heading">The Main Story: REPL (Read-Eval-Print Loop)</h2>
+            <p>The heart of mysh is a loop that repeats four times per command:</p>
+            <div class="translation-block animate-in">
+              <div class="translation-code">
+                <span class="translation-label">CODE</span>
+                <pre><code><span class="code-keyword">while</span> (!should_exit) {
+  printf(<span class="code-string">"mysh> "</span>);
+
+  pipeline = parse_input(buffer);
+  history_add(buffer);
+
+  <span class="code-keyword">if</span> (is_builtin(...)) {
+    execute_builtin(pipeline);
+  } <span class="code-keyword">else</span> {
+    pid = execute_command(...);
+    waitpid(pid, NULL, <span class="code-number">0</span>);
+  }
+}</code></pre>
+              </div>
+              <div class="translation-english">
+                <span class="translation-label">WHAT IT DOES</span>
+                <div class="translation-lines">
+                  <p class="tl"><strong>Read:</strong> Show the prompt and get what the user typed</p>
+                  <p class="tl"><strong>Eval:</strong> Parse it and check if it's a built-in command</p>
+                  <p class="tl"><strong>Execute:</strong> Either run the built-in or fork a new process for external programs</p>
+                  <p class="tl"><strong>Print:</strong> Wait for it to finish, then loop back for the next command</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">The Seven Players (Modules)</h2>
+            <div class="pattern-cards">
+              <div class="pattern-card" style="border-top-color: var(--color-actor-1)">
+                <div class="pattern-icon" style="background: var(--color-actor-1)">📖</div>
+                <h4 class="pattern-title">Parser</h4>
+                <p class="pattern-desc">Breaks `ls -la | grep x > file` into tokens, detects pipes, finds redirects</p>
+              </div>
+
+              <div class="pattern-card" style="border-top-color: var(--color-actor-2)">
+                <div class="pattern-icon" style="background: var(--color-actor-2)">🚀</div>
+                <h4 class="pattern-title">Executor</h4>
+                <p class="pattern-desc">Forks a new process and runs a program using execvp()</p>
+              </div>
+
+              <div class="pattern-card" style="border-top-color: var(--color-actor-3)">
+                <div class="pattern-icon" style="background: var(--color-actor-3)">🔗</div>
+                <h4 class="pattern-title">Pipes</h4>
+                <p class="pattern-desc">Wires up multiple commands so output of one feeds input to next</p>
+              </div>
+
+              <div class="pattern-card" style="border-top-color: var(--color-actor-4)">
+                <div class="pattern-icon" style="background: var(--color-actor-4)">📂</div>
+                <h4 class="pattern-title">Redirects</h4>
+                <p class="pattern-desc">Sends stdout to files (>), reads stdin from files (<), captures errors (2>)</p>
+              </div>
+
+              <div class="pattern-card" style="border-top-color: var(--color-actor-5)">
+                <div class="pattern-icon" style="background: var(--color-actor-5)">⌨️</div>
+                <h4 class="pattern-title">Built-ins</h4>
+                <p class="pattern-desc">Special commands (cd, exit, jobs) that run inside the shell, not as separate programs</p>
+              </div>
+
+              <div class="pattern-card" style="border-top-color: #B5858B">
+                <div class="pattern-icon" style="background: #B5858B">🎯</div>
+                <h4 class="pattern-title">Signals</h4>
+                <p class="pattern-desc">Handles Ctrl+C and Ctrl+Z so they interrupt programs, not the shell itself</p>
+              </div>
+
+              <div class="pattern-card" style="border-top-color: #8B7355">
+                <div class="pattern-icon" style="background: #8B7355">📋</div>
+                <h4 class="pattern-title">Jobs</h4>
+                <p class="pattern-desc">Tracks background processes so you can bring them back with fg</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">How They Work Together: One Command's Journey</h2>
+            <p>When you type `sleep 10 &` and press Enter:</p>
+            <div class="flow-steps">
+              <div class="flow-step">
+                <div class="flow-step-num">1</div>
+                <p><strong>Parser</strong> reads "sleep 10 &"</p>
+              </div>
+              <div class="flow-arrow">→</div>
+              <div class="flow-step">
+                <div class="flow-step-num">2</div>
+                <p><strong>Executor</strong> forks a child process</p>
+              </div>
+              <div class="flow-arrow">→</div>
+              <div class="flow-step">
+                <div class="flow-step-num">3</div>
+                <p><strong>Jobs</strong> registers it as background</p>
+              </div>
+              <div class="flow-arrow">→</div>
+              <div class="flow-step">
+                <div class="flow-step-num">4</div>
+                <p><strong>Signals</strong> handle Ctrl+C safely</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Why This Architecture Matters</h2>
+            <div class="callout callout-info">
+              <div class="callout-icon">ℹ️</div>
+              <div class="callout-content">
+                <strong class="callout-title">Separation of Concerns</strong>
+                <p>Each module does one job and does it well. The parser doesn't execute, the executor doesn't parse. This makes the code easier to understand, modify, and debug. When something breaks, you know exactly where to look.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Module 2 Quiz: Know Your Characters</h2>
+            <div class="quiz-container" id="quiz-2">
+              <div class="quiz-question-block" data-question="q1" data-correct="option-c">
+                <h3 class="quiz-question">You want to add a new built-in command `pwd2` that does something custom. Which module should you modify?</h3>
+                <div class="quiz-options">
+                  <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>Parser — it needs to recognize the new command name</span>
+                  </button>
+                  <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>Executor — it runs all commands</span>
+                  </button>
+                  <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>Built-ins — that's where custom shell commands live</span>
+                  </button>
+                </div>
+                <div class="quiz-feedback" id="q1-feedback"></div>
+              </div>
+
+              <div class="quiz-question-block" data-question="q2" data-correct="option-b">
+                <h3 class="quiz-question">What's the difference between Parser and Executor?</h3>
+                <div class="quiz-options">
+                  <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>There is no difference — they do the same thing</span>
+                  </button>
+                  <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>Parser understands WHAT to do, Executor actually DOES it</span>
+                  </button>
+                  <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>Parser only handles pipes, Executor handles redirects</span>
+                  </button>
+                </div>
+                <div class="quiz-feedback" id="q2-feedback"></div>
+              </div>
+
+              <button class="quiz-check-btn" onclick="checkQuiz('quiz-2')">Check Answers</button>
+              <button class="quiz-reset-btn" onclick="resetQuiz('quiz-2')">Try Again</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <!-- MODULE 3: Parsing -->
+    <section class="module" id="module-3" style="background: var(--color-bg)">
+      <div class="module-content">
+        <header class="module-header animate-in">
+          <span class="module-number">03</span>
+          <h1 class="module-title">Parsing: Breaking Commands into Pieces</h1>
+          <p class="module-subtitle">How mysh reads your input and understands what you mean</p>
+        </header>
+
+        <div class="module-body">
+          <section class="screen animate-in">
+            <h2 class="screen-heading">The Parsing Problem</h2>
+            <p>You type: `ls -la | grep .c > files.txt`</p>
+            <p>Your shell needs to understand:</p>
+            <ul>
+              <li>Two programs: <code>ls</code> and <code>grep</code></li>
+              <li><code>ls</code> gets arguments: <code>-la</code></li>
+              <li><code>grep</code> gets arguments: <code>.c</code></li>
+              <li>They're connected by a pipe: <code>|</code></li>
+              <li>The output goes to a file: <code>files.txt</code></li>
+            </ul>
+            <p>If the parser gets this wrong, nothing works. So let's see how it works.</p>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Step 1: Tokenization — Split by Spaces</h2>
+            <div class="translation-block animate-in">
+              <div class="translation-code">
+                <span class="translation-label">CODE</span>
+                <pre><code><span class="code-keyword">char</span> *saveptr;
+<span class="code-keyword">char</span> *token = strtok_r(cmd,
+                      <span class="code-string">" \t"</span>,
+                      &amp;saveptr);
+
+<span class="code-keyword">while</span> (token) {
+  <span class="code-comment">// save this word</span>
+  token = strtok_r(NULL,
+                   <span class="code-string">" \t"</span>,
+                   &amp;saveptr);
+}</code></pre>
+              </div>
+              <div class="translation-english">
+                <span class="translation-label">WHAT IT DOES</span>
+                <div class="translation-lines">
+                  <p class="tl"><code>strtok_r</code> is a function that splits a string. It breaks up the command every time it sees a space or tab.</p>
+                  <p class="tl">Each piece becomes a "token" — a word the shell understands.</p>
+                  <p class="tl">From `ls -la | grep .c`, we get: ["ls", "-la", "|", "grep", ".c"]</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Step 2: Detect Special Symbols</h2>
+            <p>After tokenizing, the parser looks for special symbols:</p>
+            <div class="pattern-cards">
+              <div class="pattern-card" style="border-top-color: var(--color-actor-1)">
+                <div class="pattern-icon" style="background: var(--color-actor-1)">|</div>
+                <h4 class="pattern-title">Pipe</h4>
+                <p class="pattern-desc">Two commands talk to each other</p>
+              </div>
+
+              <div class="pattern-card" style="border-top-color: var(--color-actor-2)">
+                <div class="pattern-icon" style="background: var(--color-actor-2)">&gt;</div>
+                <h4 class="pattern-title">Redirect Out</h4>
+                <p class="pattern-desc">Send output to a file</p>
+              </div>
+
+              <div class="pattern-card" style="border-top-color: var(--color-actor-3)">
+                <div class="pattern-icon" style="background: var(--color-actor-3)">&lt;</div>
+                <h4 class="pattern-title">Redirect In</h4>
+                <p class="pattern-desc">Read input from a file</p>
+              </div>
+
+              <div class="pattern-card" style="border-top-color: var(--color-actor-4)">
+                <div class="pattern-icon" style="background: var(--color-actor-4)">&</div>
+                <h4 class="pattern-title">Background</h4>
+                <p class="pattern-desc">Run in background, don't wait</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Step 3: Build the Data Structures</h2>
+            <p>Once parsing is done, the shell builds two key structures:</p>
+            <div class="translation-block animate-in">
+              <div class="translation-code">
+                <span class="translation-label">CODE</span>
+                <pre><code><span class="code-keyword">typedef struct</span> {
+  <span class="code-keyword">char</span> *argv[MAX_ARGS];
+  <span class="code-keyword">int</span> argc;
+  Redirect *redirects;
+  <span class="code-keyword">int</span> bg_flag;
+} Command;
+
+<span class="code-keyword">typedef struct</span> {
+  Command *commands;
+  <span class="code-keyword">int</span> num_commands;
+} Pipeline;</code></pre>
+              </div>
+              <div class="translation-english">
+                <span class="translation-label">WHAT IT MEANS</span>
+                <div class="translation-lines">
+                  <p class="tl"><strong>Command:</strong> One program to run, with arguments, redirects, and whether it's background</p>
+                  <p class="tl"><strong>Pipeline:</strong> One or more commands connected by pipes</p>
+                  <p class="tl">For `ls | grep | wc`, the Pipeline has 3 Commands</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Module 3 Quiz: Parsing Concepts</h2>
+            <div class="quiz-container" id="quiz-3">
+              <div class="quiz-question-block" data-question="q1" data-correct="option-a">
+                <h3 class="quiz-question">You type `cat file.txt | wc -l > count.txt`. How many Command structs does the parser create?</h3>
+                <div class="quiz-options">
+                  <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>2 — one for cat, one for wc</span>
+                  </button>
+                  <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>3 — one for each program plus the redirect</span>
+                  </button>
+                  <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>1 — it's all one command</span>
+                  </button>
+                </div>
+                <div class="quiz-feedback" id="q1-feedback"></div>
+              </div>
+
+              <button class="quiz-check-btn" onclick="checkQuiz('quiz-3')">Check Answers</button>
+              <button class="quiz-reset-btn" onclick="resetQuiz('quiz-3')">Try Again</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <!-- MODULE 4: Execution (fork/exec) -->
+    <section class="module" id="module-4" style="background: var(--color-bg-warm)">
+      <div class="module-content">
+        <header class="module-header animate-in">
+          <span class="module-number">04</span>
+          <h1 class="module-title">Execution: The Fork/Exec Magic</h1>
+          <p class="module-subtitle">How mysh actually runs your programs — the most important syscalls in Unix</p>
+        </header>
+
+        <div class="module-body">
+          <section class="screen animate-in">
+            <h2 class="screen-heading">The Fundamental Problem</h2>
+            <p>The shell is running. When you type `ls`, the shell needs to run `ls` but also stay alive to accept your next command. How?</p>
+            <p>The answer: <span class="term" data-definition="To fork means to create a copy of the current process. The child process is identical to the parent, running the same code at the same place.">fork</span> and <span class="term" data-definition="Exec (execute) replaces the current process's code with a new program. It doesn't create a new process — it overwrites the current one.">exec</span>.</p>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Fork: Cloning the Shell</h2>
+            <div class="translation-block animate-in">
+              <div class="translation-code">
+                <span class="translation-label">CODE</span>
+                <pre><code>pid_t pid = <span class="code-function">fork</span>();
+
+<span class="code-keyword">if</span> (pid == <span class="code-number">-1</span>) {
+  <span class="code-comment">// fork failed</span>
+}
+<span class="code-keyword">else if</span> (pid == <span class="code-number">0</span>) {
+  <span class="code-comment">// I'm the child</span>
+}
+<span class="code-keyword">else</span> {
+  <span class="code-comment">// I'm the parent, pid has the child's ID</span>
+}</code></pre>
+              </div>
+              <div class="translation-english">
+                <span class="translation-label">WHAT HAPPENS</span>
+                <div class="translation-lines">
+                  <p class="tl"><code>fork()</code> creates an exact copy of the shell process.</p>
+                  <p class="tl">Now there are TWO processes running the same code.</p>
+                  <p class="tl">The parent gets the child's <span class="term" data-definition="A PID (process ID) is a number that uniquely identifies a running process on your computer.">PID</span> and knows about the child. The child gets 0.</p>
+                  <p class="tl">They can now go different directions — the parent stays a shell, the child becomes `ls`.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Exec: Becoming ls</h2>
+            <div class="translation-block animate-in">
+              <div class="translation-code">
+                <span class="translation-label">CODE</span>
+                <pre><code><span class="code-keyword">if</span> (pid == <span class="code-number">0</span>) {
+  <span class="code-comment">// Child process</span>
+
+  <span class="code-comment">// Apply any redirects first</span>
+  apply_redirects(cmd);
+
+  <span class="code-comment">// Replace this process with ls</span>
+  <span class="code-function">execvp</span>(
+    <span class="code-string">"ls"</span>,
+    argv
+  );
+
+  <span class="code-comment">// If execvp returns, it failed</span>
+  perror(<span class="code-string">"ls"</span>);
+  exit(<span class="code-number">127</span>);
+}</code></pre>
+              </div>
+              <div class="translation-english">
+                <span class="translation-label">WHAT HAPPENS</span>
+                <div class="translation-lines">
+                  <p class="tl"><code>execvp</code> completely replaces the child process with a new program.</p>
+                  <p class="tl">The child's memory, code, everything is overwritten with `ls`.</p>
+                  <p class="tl">It's like a costume change — the person doesn't change, but now they're dressed as `ls`.</p>
+                  <p class="tl">If `execvp` succeeds, it never returns. The process is now `ls`, not the shell.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Wait: The Parent Holds Its Breath</h2>
+            <div class="translation-block animate-in">
+              <div class="translation-code">
+                <span class="translation-label">CODE</span>
+                <pre><code><span class="code-keyword">else</span> {
+  <span class="code-comment">// Parent process</span>
+
+  <span class="code-comment">// If foreground, wait for child</span>
+  <span class="code-keyword">if</span> (!is_background) {
+    waitpid(pid, NULL, <span class="code-number">0</span>);
+  } <span class="code-keyword">else</span> {
+    <span class="code-comment">// Background: add to job list</span>
+    add_job(pid, JOB_RUNNING, cmd);
+  }
+}</code></pre>
+              </div>
+              <div class="translation-english">
+                <span class="translation-label">WHAT HAPPENS</span>
+                <div class="translation-lines">
+                  <p class="tl"><code>waitpid</code> tells the parent: "Sit here and wait for child PID to finish."</p>
+                  <p class="tl">The shell blocks (does nothing) until `ls` completes.</p>
+                  <p class="tl">When `ls` exits, the shell wakes up and shows its prompt again.</p>
+                  <p class="tl">If the & flag was used, the shell doesn't wait — it adds the job to a list and keeps going.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Why This Matters for You</h2>
+            <div class="callout callout-accent">
+              <div class="callout-icon">💡</div>
+              <div class="callout-content">
+                <strong class="callout-title">The Fork/Exec Pattern Appears Everywhere</strong>
+                <p>This isn't shell-specific. Whenever a program needs to run another program (a web server spawning a worker, a scheduler launching a task, a container engine starting containers), fork/exec is the pattern. Understanding it here means you understand a fundamental building block of computing.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Module 4 Quiz: Fork and Exec</h2>
+            <div class="quiz-container" id="quiz-4">
+              <div class="quiz-question-block" data-question="q1" data-correct="option-b">
+                <h3 class="quiz-question">After `fork()`, how many processes are running the same code?</h3>
+                <div class="quiz-options">
+                  <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>1 — fork creates a thread, not a new process</span>
+                  </button>
+                  <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>2 — the parent and child are both running</span>
+                  </button>
+                  <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>Fork doesn't create anything, the OS does</span>
+                  </button>
+                </div>
+                <div class="quiz-feedback" id="q1-feedback"></div>
+              </div>
+
+              <button class="quiz-check-btn" onclick="checkQuiz('quiz-4')">Check Answers</button>
+              <button class="quiz-reset-btn" onclick="resetQuiz('quiz-4')">Try Again</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <!-- MODULE 5: Pipes -->
+    <section class="module" id="module-5" style="background: var(--color-bg)">
+      <div class="module-content">
+        <header class="module-header animate-in">
+          <span class="module-number">05</span>
+          <h1 class="module-title">Pipes: How Programs Talk to Each Other</h1>
+          <p class="module-subtitle">The secret sauce that makes Unix powerful — anonymous communication channels</p>
+        </header>
+
+        <div class="module-body">
+          <section class="screen animate-in">
+            <h2 class="screen-heading">What is a Pipe?</h2>
+            <p>A pipe is not a file. It's not on disk. It's an anonymous channel that connects two processes in memory.</p>
+            <p>Think of it like a post office mail slot: one process drops data in the slot (writing to the pipe), another picks it up (reading from the pipe). Once you read data, it's gone — the next read gets different data.</p>
+            <p>Try this: `ls | wc -l`</p>
+            <p><code>ls</code> outputs file names. <code>wc -l</code> counts lines. The pipe is what connects them—ls's output becomes wc's input.</p>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Creating a Pipe: Two File Descriptors</h2>
+            <p><span class="term" data-definition="A file descriptor is a number that represents an open file, pipe, socket, or other I/O resource. 0 is stdin, 1 is stdout, 2 is stderr.">File descriptors</span> are just numbers (0, 1, 2...) that point to open resources. When you create a pipe, you get two file descriptors:</p>
+            <div class="translation-block animate-in">
+              <div class="translation-code">
+                <span class="translation-label">CODE</span>
+                <pre><code><span class="code-keyword">int</span> pipefd[<span class="code-number">2</span>];
+<span class="code-function">pipe</span>(pipefd);
+
+<span class="code-comment">// pipefd[0] = read end</span>
+<span class="code-comment">// pipefd[1] = write end</span></code></pre>
+              </div>
+              <div class="translation-english">
+                <span class="translation-label">WHAT IT MEANS</span>
+                <div class="translation-lines">
+                  <p class="tl"><code>pipe()</code> creates an anonymous channel in memory.</p>
+                  <p class="tl">The first FD (pipefd[0]) is for reading from the pipe.</p>
+                  <p class="tl">The second FD (pipefd[1]) is for writing to the pipe.</p>
+                  <p class="tl">They're connected — whatever you write to [1] you can read from [0].</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Wiring Up: dup2() Magic</h2>
+            <p>After forking, each child process has a copy of the file descriptors. The shell uses <code>dup2()</code> to "rewire" them:</p>
+            <div class="translation-block animate-in">
+              <div class="translation-code">
+                <span class="translation-label">CODE</span>
+                <pre><code><span class="code-keyword">for</span> (<span class="code-keyword">int</span> i = <span class="code-number">0</span>; i < num_commands; i++) {
+  pid = <span class="code-function">fork</span>();
+
+  <span class="code-keyword">if</span> (pid == <span class="code-number">0</span>) {
+    <span class="code-comment">// Child: connect my stdin to pipe</span>
+    <span class="code-keyword">if</span> (i > <span class="code-number">0</span>)
+      <span class="code-function">dup2</span>(pipes[i-<span class="code-number">1</span>][<span class="code-number">0</span>], <span class="code-number">0</span>);
+
+    <span class="code-comment">// Connect my stdout to pipe</span>
+    <span class="code-keyword">if</span> (i < num_commands-<span class="code-number">1</span>)
+      <span class="code-function">dup2</span>(pipes[i][<span class="code-number">1</span>], <span class="code-number">1</span>);
+
+    execvp(...);
+  }
+}</code></pre>
+              </div>
+              <div class="translation-english">
+                <span class="translation-label">WHAT HAPPENS</span>
+                <div class="translation-lines">
+                  <p class="tl"><code>dup2(fd, newfd)</code> redirects file descriptor <code>newfd</code> to point to <code>fd</code>.</p>
+                  <p class="tl"><code>dup2(pipes[i-1][0], 0)</code>: "Make my stdin (fd 0) point to the pipe I need to read from"</p>
+                  <p class="tl"><code>dup2(pipes[i][1], 1)</code>: "Make my stdout (fd 1) point to the pipe I need to write to"</p>
+                  <p class="tl">Now when the child writes to stdout, it goes into the pipe. Pretty clever!</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">The Full Picture: ls | grep | wc</h2>
+            <div class="arch-diagram animate-in">
+              <div class="arch-zone">
+                <h4 class="arch-zone-label">Pipes Created</h4>
+                <div class="arch-components">
+                  <div class="arch-component">
+                    <div class="arch-component-icon">📌</div>
+                    <div class="arch-component-name">Pipe 0</div>
+                  </div>
+                  <div class="arch-component">
+                    <div class="arch-component-icon">📌</div>
+                    <div class="arch-component-name">Pipe 1</div>
+                  </div>
+                </div>
+              </div>
+              <div class="arch-zone">
+                <h4 class="arch-zone-label">Processes and Their File Descriptors</h4>
+                <div class="step-cards">
+                  <div class="step-card">
+                    <div class="step-num">1</div>
+                    <div class="step-body">
+                      <strong>ls</strong>
+                      <p>stdout (1) → Pipe 0 write end</p>
+                    </div>
+                  </div>
+                  <div class="step-card">
+                    <div class="step-num">2</div>
+                    <div class="step-body">
+                      <strong>grep</strong>
+                      <p>stdin (0) → Pipe 0 read end</p>
+                      <p>stdout (1) → Pipe 1 write end</p>
+                    </div>
+                  </div>
+                  <div class="step-card">
+                    <div class="step-num">3</div>
+                    <div class="step-body">
+                      <strong>wc</strong>
+                      <p>stdin (0) → Pipe 1 read end</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Module 5 Quiz: Pipes and File Descriptors</h2>
+            <div class="quiz-container" id="quiz-5">
+              <div class="quiz-question-block" data-question="q1" data-correct="option-c">
+                <h3 class="quiz-question">For the command `cmd1 | cmd2 | cmd3`, how many pipes does the shell create?</h3>
+                <div class="quiz-options">
+                  <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>3 — one per command</span>
+                  </button>
+                  <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>1 — all commands share one pipe</span>
+                  </button>
+                  <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>2 — pipes connect the gaps between commands</span>
+                  </button>
+                </div>
+                <div class="quiz-feedback" id="q1-feedback"></div>
+              </div>
+
+              <button class="quiz-check-btn" onclick="checkQuiz('quiz-5')">Check Answers</button>
+              <button class="quiz-reset-btn" onclick="resetQuiz('quiz-5')">Try Again</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <!-- MODULE 6: Signals and Background Jobs -->
+    <section class="module" id="module-6" style="background: var(--color-bg-warm)">
+      <div class="module-content">
+        <header class="module-header animate-in">
+          <span class="module-number">06</span>
+          <h1 class="module-title">Signals and Background Jobs</h1>
+          <p class="module-subtitle">How mysh handles Ctrl+C, Ctrl+Z, and lets you run programs in the background</p>
+        </header>
+
+        <div class="module-body">
+          <section class="screen animate-in">
+            <h2 class="screen-heading">The Problem: Interrupting Programs</h2>
+            <p>You're running `sleep 100`. You get bored. You press Ctrl+C.</p>
+            <p>What should happen?</p>
+            <ul>
+              <li>The sleep process should stop (not the shell)</li>
+              <li>The shell should display its prompt again</li>
+              <li>You should be able to type a new command</li>
+            </ul>
+            <p>If the shell didn't handle signals carefully, Ctrl+C would kill the entire shell. You'd lose your work.</p>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Signals: Interrupts from the OS</h2>
+            <p>A <span class="term" data-definition="A signal is an asynchronous notification sent by the OS to a running process. It's like a text message from the operating system: 'Hey, something happened.'">signal</span> is how the OS tells a process "something happened." Ctrl+C sends SIGINT. Ctrl+Z sends SIGTSTP.</p>
+            <div class="pattern-cards">
+              <div class="pattern-card" style="border-top-color: var(--color-actor-1)">
+                <div class="pattern-icon" style="background: var(--color-actor-1)">⚡</div>
+                <h4 class="pattern-title">SIGINT (Ctrl+C)</h4>
+                <p class="pattern-desc">Interrupt — stop what you're doing</p>
+              </div>
+
+              <div class="pattern-card" style="border-top-color: var(--color-actor-2)">
+                <div class="pattern-icon" style="background: var(--color-actor-2)">⏸️</div>
+                <h4 class="pattern-title">SIGTSTP (Ctrl+Z)</h4>
+                <p class="pattern-desc">Stop — pause and let me do something else</p>
+              </div>
+
+              <div class="pattern-card" style="border-top-color: var(--color-actor-3)">
+                <div class="pattern-icon" style="background: var(--color-actor-3)">☠️</div>
+                <h4 class="pattern-title">SIGCHLD</h4>
+                <p class="pattern-desc">Child died — clean up the dead process</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Shell Strategy: Ignore Signals</h2>
+            <p>The shell does something clever: it ignores SIGINT and SIGTSTP.</p>
+            <div class="translation-block animate-in">
+              <div class="translation-code">
+                <span class="translation-label">CODE</span>
+                <pre><code><span class="code-keyword">void</span> <span class="code-function">setup_signals</span>() {
+  <span class="code-keyword">struct</span> sigaction sa;
+  sa.sa_handler = SIG_IGN;
+
+  <span class="code-function">sigaction</span>(SIGINT, &amp;sa, NULL);
+  <span class="code-function">sigaction</span>(SIGTSTP, &amp;sa, NULL);
+}</code></pre>
+              </div>
+              <div class="translation-english">
+                <span class="translation-label">WHAT IT DOES</span>
+                <div class="translation-lines">
+                  <p class="tl">When the shell starts, it registers signal handlers.</p>
+                  <p class="tl"><code>SIG_IGN</code> means "ignore this signal — don't do anything."</p>
+                  <p class="tl">Now when you press Ctrl+C, the shell doesn't die. But the child process does (children inherit the default handlers).</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Background Jobs: Run Without Waiting</h2>
+            <p>When you type `sleep 100 &`, the & tells the shell "don't wait for this."</p>
+            <div class="translation-block animate-in">
+              <div class="translation-code">
+                <span class="translation-label">CODE</span>
+                <pre><code><span class="code-keyword">if</span> (is_background) {
+  add_job(pid, JOB_RUNNING, cmd);
+  printf(<span class="code-string">"[%d] %d\n"</span>,
+         job_id, pid);
+} <span class="code-keyword">else</span> {
+  waitpid(pid, NULL, <span class="code-number">0</span>);
+}</code></pre>
+              </div>
+              <div class="translation-english">
+                <span class="translation-label">WHAT HAPPENS</span>
+                <div class="translation-lines">
+                  <p class="tl">If the & flag was parsed, the shell adds the job to its job list instead of waiting.</p>
+                  <p class="tl">It prints the job ID and PID so you know which job you're managing.</p>
+                  <p class="tl">Meanwhile, the shell loops back to the prompt ready for another command.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">SIGCHLD: Reaping Dead Children</h2>
+            <p>Background jobs don't wait. But the shell eventually learns they finished when the OS sends SIGCHLD ("child died").</p>
+            <div class="callout callout-info">
+              <div class="callout-icon">ℹ️</div>
+              <div class="callout-content">
+                <strong class="callout-title">Why "Reaping" Matters</strong>
+                <p>If a child process finishes but the parent doesn't acknowledge it, the child becomes a "zombie" — it's dead but still taking up a process table slot. The shell must handle SIGCHLD and call <code>waitpid()</code> to reap the child.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Module 6 Quiz: Signals and Jobs</h2>
+            <div class="quiz-container" id="quiz-6">
+              <div class="quiz-question-block" data-question="q1" data-correct="option-a">
+                <h3 class="quiz-question">You're running mysh. You press Ctrl+C. What happens?</h3>
+                <div class="quiz-options">
+                  <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>If mysh is waiting for a foreground process, that process dies. If idle, mysh ignores it.</span>
+                  </button>
+                  <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>mysh always dies because it set up signal handlers</span>
+                  </button>
+                  <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>Nothing — Ctrl+C doesn't work in mysh</span>
+                  </button>
+                </div>
+                <div class="quiz-feedback" id="q1-feedback"></div>
+              </div>
+
+              <button class="quiz-check-btn" onclick="checkQuiz('quiz-6')">Check Answers</button>
+              <button class="quiz-reset-btn" onclick="resetQuiz('quiz-6')">Try Again</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <!-- MODULE 7: I/O Redirection -->
+    <section class="module" id="module-7" style="background: var(--color-bg)">
+      <div class="module-content">
+        <header class="module-header animate-in">
+          <span class="module-number">07</span>
+          <h1 class="module-title">I/O Redirection: Sending Data to Files</h1>
+          <p class="module-subtitle">How > and < work, and why it's beautiful Unix design</p>
+        </header>
+
+        <div class="module-body">
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Input/Output: The Three Standard Streams</h2>
+            <p>Every Unix process has three built-in communication channels:</p>
+            <div class="step-cards">
+              <div class="step-card">
+                <div class="step-num">0</div>
+                <div class="step-body">
+                  <strong>stdin</strong>
+                  <p>Where data comes FROM (your keyboard by default)</p>
+                </div>
+              </div>
+              <div class="step-card">
+                <div class="step-num">1</div>
+                <div class="step-body">
+                  <strong>stdout</strong>
+                  <p>Where data goes TO (your screen by default)</p>
+                </div>
+              </div>
+              <div class="step-card">
+                <div class="step-num">2</div>
+                <div class="step-body">
+                  <strong>stderr</strong>
+                  <p>Where errors go (your screen by default)</p>
+                </div>
+              </div>
+            </div>
+            <p>But they don't have to point to your screen! That's where redirection comes in.</p>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">The Redirection Trick: Open → dup2()</h2>
+            <p>When you type `echo hello > file.txt`, here's what happens:</p>
+            <div class="translation-block animate-in">
+              <div class="translation-code">
+                <span class="translation-label">CODE</span>
+                <pre><code><span class="code-keyword">int</span> fd = <span class="code-function">open</span>(
+  <span class="code-string">"file.txt"</span>,
+  O_WRONLY | O_CREAT | O_TRUNC,
+  <span class="code-number">0644</span>
+);
+
+<span class="code-function">dup2</span>(fd, <span class="code-number">1</span>);
+
+<span class="code-function">execvp</span>(<span class="code-string">"echo"</span>, argv);</code></pre>
+              </div>
+              <div class="translation-english">
+                <span class="translation-label">WHAT HAPPENS</span>
+                <div class="translation-lines">
+                  <p class="tl"><code>open()</code> creates or opens the file, returning a file descriptor.</p>
+                  <p class="tl"><code>dup2(fd, 1)</code> "redirects" stdout (fd 1) to point to that file.</p>
+                  <p class="tl">When echo runs and tries to write to stdout, it's actually writing to the file!</p>
+                  <p class="tl">From echo's perspective, nothing changed. It just writes to fd 1. But fd 1 now points to a file.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Variants: Truncate vs Append</h2>
+            <div class="pattern-cards">
+              <div class="pattern-card" style="border-top-color: var(--color-actor-1)">
+                <div class="pattern-icon" style="background: var(--color-actor-1)">&gt;</div>
+                <h4 class="pattern-title">Redirect Output</h4>
+                <p class="pattern-desc"><code>echo hello > file.txt</code> — truncate (overwrite) the file</p>
+              </div>
+
+              <div class="pattern-card" style="border-top-color: var(--color-actor-2)">
+                <div class="pattern-icon" style="background: var(--color-actor-2)">&gt;&gt;</div>
+                <h4 class="pattern-title">Append</h4>
+                <p class="pattern-desc"><code>echo hello >> file.txt</code> — add to the end</p>
+              </div>
+
+              <div class="pattern-card" style="border-top-color: var(--color-actor-3)">
+                <div class="pattern-icon" style="background: var(--color-actor-3)">&lt;</div>
+                <h4 class="pattern-title">Redirect Input</h4>
+                <p class="pattern-desc"><code>wc -l < file.txt</code> — read from file instead of keyboard</p>
+              </div>
+
+              <div class="pattern-card" style="border-top-color: var(--color-actor-4)">
+                <div class="pattern-icon" style="background: var(--color-actor-4)">2&gt;</div>
+                <h4 class="pattern-title">Redirect Errors</h4>
+                <p class="pattern-desc"><code>cmd 2> errors.txt</code> — save errors to a file</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Why This is Beautiful</h2>
+            <div class="callout callout-accent">
+              <div class="callout-icon">💡</div>
+              <div class="callout-content">
+                <strong class="callout-title">The Unix Philosophy: Everything is a File</strong>
+                <p>Files, pipes, sockets, devices — they're all treated the same way. A program doesn't need to know (or care) if it's writing to stdout, a file, or across a network. It just writes to fd 1. The shell handles all the wiring. This is why Unix programs compose so beautifully.</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Module 7 Quiz: I/O Redirection</h2>
+            <div class="quiz-container" id="quiz-7">
+              <div class="quiz-question-block" data-question="q1" data-correct="option-b">
+                <h3 class="quiz-question">What's the difference between `>` and `>>`?</h3>
+                <div class="quiz-options">
+                  <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span">&gt; is for stdout, &gt;&gt; is for stderr</span>
+                  </button>
+                  <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>&gt; overwrites the file, &gt;&gt; appends to it</span>
+                  </button>
+                  <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>They do the same thing</span>
+                  </button>
+                </div>
+                <div class="quiz-feedback" id="q1-feedback"></div>
+              </div>
+
+              <button class="quiz-check-btn" onclick="checkQuiz('quiz-7')">Check Answers</button>
+              <button class="quiz-reset-btn" onclick="resetQuiz('quiz-7')">Try Again</button>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+
+    <!-- MODULE 8: Putting It All Together -->
+    <section class="module" id="module-8" style="background: var(--color-bg-warm)">
+      <div class="module-content">
+        <header class="module-header animate-in">
+          <span class="module-number">08</span>
+          <h1 class="module-title">Putting It All Together</h1>
+          <p class="module-subtitle">The complete architecture, and where to go from here</p>
+        </header>
+
+        <div class="module-body">
+          <section class="screen animate-in">
+            <h2 class="screen-heading">The Full Data Flow</h2>
+            <p>You type: `cat file.txt | grep error > results.txt &`</p>
+            <div class="step-cards">
+              <div class="step-card">
+                <div class="step-num">1</div>
+                <div class="step-body">
+                  <strong>main.c (REPL)</strong>
+                  <p>Reads your command into a buffer</p>
+                </div>
+              </div>
+              <div class="step-card">
+                <div class="step-num">2</div>
+                <div class="step-body">
+                  <strong>parser.c</strong>
+                  <p>Tokenizes, detects |, finds >, recognizes &</p>
+                </div>
+              </div>
+              <div class="step-card">
+                <div class="step-num">3</div>
+                <div class="step-body">
+                  <strong>pipes.c</strong>
+                  <p>Creates 1 pipe, forks 2 child processes</p>
+                </div>
+              </div>
+              <div class="step-card">
+                <div class="step-num">4</div>
+                <div class="step-body">
+                  <strong>redirect.c (in children)</strong>
+                  <p>cat: wires stdout to pipe. grep: wires stdin from pipe, stdout to file</p>
+                </div>
+              </div>
+              <div class="step-card">
+                <div class="step-num">5</div>
+                <div class="step-body">
+                  <strong>executor.c (in children)</strong>
+                  <p>Calls execvp() to become cat and grep</p>
+                </div>
+              </div>
+              <div class="step-card">
+                <div class="step-num">6</div>
+                <div class="step-body">
+                  <strong>jobs.c (in parent)</strong>
+                  <p>Because of &, adds the pipeline to the job list instead of waiting</p>
+                </div>
+              </div>
+              <div class="step-card">
+                <div class="step-num">7</div>
+                <div class="step-body">
+                  <strong>main.c</strong>
+                  <p>Prints [job_id] PID and loops back to the prompt</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">The Architecture at a Glance</h2>
+            <div class="arch-diagram animate-in">
+              <div class="arch-zone">
+                <h4 class="arch-zone-label">The Core Loop (main.c)</h4>
+                <div class="arch-components">
+                  <div class="arch-component">
+                    <div class="arch-component-icon">🔄</div>
+                    <div class="arch-component-name">REPL Loop</div>
+                  </div>
+                </div>
+              </div>
+              <div class="arch-zone">
+                <h4 class="arch-zone-label">Command Preparation (parser.c)</h4>
+                <div class="arch-components">
+                  <div class="arch-component">
+                    <div class="arch-component-icon">📖</div>
+                    <div class="arch-component-name">Parse</div>
+                  </div>
+                </div>
+              </div>
+              <div class="arch-zone">
+                <h4 class="arch-zone-label">Execution (executor.c, pipes.c, redirect.c)</h4>
+                <div class="arch-components">
+                  <div class="arch-component">
+                    <div class="arch-component-icon">🚀</div>
+                    <div class="arch-component-name">Execute</div>
+                  </div>
+                  <div class="arch-component">
+                    <div class="arch-component-icon">🔗</div>
+                    <div class="arch-component-name">Pipes</div>
+                  </div>
+                  <div class="arch-component">
+                    <div class="arch-component-icon">📂</div>
+                    <div class="arch-component-name">Redirect</div>
+                  </div>
+                </div>
+              </div>
+              <div class="arch-zone">
+                <h4 class="arch-zone-label">Background & Signals (jobs.c, signals.c, builtins.c)</h4>
+                <div class="arch-components">
+                  <div class="arch-component">
+                    <div class="arch-component-icon">📋</div>
+                    <div class="arch-component-name">Jobs</div>
+                  </div>
+                  <div class="arch-component">
+                    <div class="arch-component-icon">⚡</div>
+                    <div class="arch-component-name">Signals</div>
+                  </div>
+                  <div class="arch-component">
+                    <div class="arch-component-icon">⌨️</div>
+                    <div class="arch-component-name">Built-ins</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Debugging Patterns: How to Solve Problems</h2>
+            <p>Now that you understand mysh, here's how to debug issues:</p>
+            <div class="pattern-cards">
+              <div class="pattern-card" style="border-top-color: #D94F30">
+                <div class="pattern-icon" style="background: #D94F30">🔍</div>
+                <h4 class="pattern-title">"Pipes hang"</h4>
+                <p class="pattern-desc">Check redirect.c — you probably didn't close pipe ends in the parent</p>
+              </div>
+
+              <div class="pattern-card" style="border-top-color: #2A7B9B">
+                <div class="pattern-icon" style="background: #2A7B9B">👻</div>
+                <h4 class="pattern-title">"Zombie processes"</h4>
+                <p class="pattern-desc">Check signals.c — SIGCHLD handler not reaping children properly</p>
+              </div>
+
+              <div class="pattern-card" style="border-top-color: #7B6DAA">
+                <div class="pattern-icon" style="background: #7B6DAA">😵</div>
+                <h4 class="pattern-title">"Shell dies on Ctrl+C"</h4>
+                <p class="pattern-desc">Check setup_signals() — shell should ignore SIGINT</p>
+              </div>
+
+              <div class="pattern-card" style="border-top-color: #D4A843">
+                <div class="pattern-icon" style="background: #D4A843">🚫</div>
+                <h4 class="pattern-title">"Command not found"</h4>
+                <p class="pattern-desc">Check parser.c and executor.c — tokenization or argv might be wrong</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Where to Go Next</h2>
+            <p>Understanding mysh gives you the foundation to explore:</p>
+            <div class="icon-rows">
+              <div class="icon-row">
+                <div class="icon-circle" style="background: var(--color-actor-1)">📚</div>
+                <div>
+                  <strong>Advanced Shell Features</strong>
+                  <p>Variables, functions, aliases, history search, tab completion</p>
+                </div>
+              </div>
+              <div class="icon-row">
+                <div class="icon-circle" style="background: var(--color-actor-2)">🏗️</div>
+                <div>
+                  <strong>Systems Programming</strong>
+                  <p>File system APIs, network sockets, threads, memory management</p>
+                </div>
+              </div>
+              <div class="icon-row">
+                <div class="icon-circle" style="background: var(--color-actor-3)">🚀</div>
+                <div>
+                  <strong>Operating Systems</strong>
+                  <p>Kernel internals, scheduling, context switching, interrupts</p>
+                </div>
+              </div>
+              <div class="icon-row">
+                <div class="icon-circle" style="background: var(--color-actor-4)">🔧</div>
+                <div>
+                  <strong>Language Design</strong>
+                  <p>Build your own scripting language using the same architecture</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Final Quiz: Comprehensive Understanding</h2>
+            <div class="quiz-container" id="quiz-8">
+              <div class="quiz-question-block" data-question="q1" data-correct="option-a">
+                <h3 class="quiz-question">You have a bug where `sleep 1000 &` gets killed immediately. Where would you start debugging?</h3>
+                <div class="quiz-options">
+                  <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>jobs.c — the background process isn't being registered correctly</span>
+                  </button>
+                  <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>parser.c — the & probably isn't being parsed</span>
+                  </button>
+                  <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>signals.c — the shell is handling SIGCHLD incorrectly</span>
+                  </button>
+                </div>
+                <div class="quiz-feedback" id="q1-feedback"></div>
+              </div>
+
+              <div class="quiz-question-block" data-question="q2" data-correct="option-b">
+                <h3 class="quiz-question">What does understanding mysh teach you that most developers never learn?</h3>
+                <div class="quiz-options">
+                  <button class="quiz-option" data-value="option-a" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>How to be a shell programmer</span>
+                  </button>
+                  <button class="quiz-option" data-value="option-b" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>How the operating system and processes actually work at the syscall level</span>
+                  </button>
+                  <button class="quiz-option" data-value="option-c" onclick="selectOption(this)">
+                    <div class="quiz-option-radio"></div>
+                    <span>How to optimize code for speed</span>
+                  </button>
+                </div>
+                <div class="quiz-feedback" id="q2-feedback"></div>
+              </div>
+
+              <button class="quiz-check-btn" onclick="checkQuiz('quiz-8')">Check Answers</button>
+              <button class="quiz-reset-btn" onclick="resetQuiz('quiz-8')">Try Again</button>
+            </div>
+          </section>
+
+          <section class="screen animate-in">
+            <h2 class="screen-heading">Congratulations! 🎓</h2>
+            <p>You now understand how Unix shells work. You know:</p>
+            <ul>
+              <li>How processes are created (fork) and replaced (exec)</li>
+              <li>How processes communicate through pipes</li>
+              <li>How file descriptors enable I/O redirection</li>
+              <li>How signals let the OS interrupt processes</li>
+              <li>How the shell manages background jobs</li>
+              <li>The Unix philosophy of separation of concerns</li>
+            </ul>
+            <div class="callout callout-accent">
+              <div class="callout-icon">🚀</div>
+              <div class="callout-content">
+                <strong>This knowledge scales</strong>
+                <p>These concepts aren't just about shells. They're the foundation of systems programming. Every web server, database, container engine, and operating system uses fork, exec, pipes, signals, and file descriptors. You're now equipped to understand (and debug) almost any systems problem.</p>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      // ===== NAVIGATION & PROGRESS =====
+      const modules = document.querySelectorAll('.module');
+      const progressBar = document.querySelector('.progress-bar');
+      const navDots = document.getElementById('nav-dots');
+
+      // Create nav dots
+      modules.forEach((module, i) => {
+        const dot = document.createElement('button');
+        dot.className = 'nav-dot' + (i === 0 ? ' current' : '');
+        dot.setAttribute('data-target', `module-${i + 1}`);
+        dot.setAttribute('aria-label', `Module ${i + 1}`);
+        dot.onclick = () => {
+          document.getElementById(`module-${i + 1}`).scrollIntoView({ behavior: 'smooth' });
+        };
+        navDots.appendChild(dot);
+      });
+
+      // Update progress bar and nav dots
+      function updateProgress() {
+        const scrollTop = window.scrollY;
+        const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
+        const progress = (scrollTop / scrollHeight) * 100;
+        progressBar.style.width = progress + '%';
+
+        // Update nav dots
+        let currentModule = 0;
+        modules.forEach((module, i) => {
+          const rect = module.getBoundingClientRect();
+          if (rect.top <= window.innerHeight / 2) {
+            currentModule = i;
+          }
+        });
+
+        document.querySelectorAll('.nav-dot').forEach((dot, i) => {
+          dot.classList.remove('current', 'visited');
+          if (i === currentModule) {
+            dot.classList.add('current');
+          } else if (i < currentModule) {
+            dot.classList.add('visited');
+          }
+        });
+      }
+
+      window.addEventListener('scroll', updateProgress, { passive: true });
+
+      // ===== ANIMATIONS =====
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      }, { rootMargin: '0px 0px -10% 0px', threshold: 0.1 });
+
+      document.querySelectorAll('.animate-in').forEach(el => observer.observe(el));
+
+      // ===== TOOLTIPS =====
+      let activeTooltip = null;
+
+      function positionTooltip(term, tip) {
+        const rect = term.getBoundingClientRect();
+        const tipWidth = 300;
+        let left = rect.left + rect.width / 2 - tipWidth / 2;
+        left = Math.max(8, Math.min(left, window.innerWidth - tipWidth - 8));
+
+        document.body.appendChild(tip);
+        const tipHeight = tip.offsetHeight;
+
+        if (rect.top - tipHeight - 8 < 0) {
+          tip.style.top = (rect.bottom + 8) + 'px';
+          tip.classList.add('flip');
+        } else {
+          tip.style.top = (rect.top - tipHeight - 8) + 'px';
+          tip.classList.remove('flip');
+        }
+        tip.style.left = left + 'px';
+      }
+
+      document.querySelectorAll('.term').forEach(term => {
+        const tip = document.createElement('span');
+        tip.className = 'term-tooltip';
+        tip.textContent = term.dataset.definition;
+
+        term.addEventListener('mouseenter', () => {
+          if (activeTooltip && activeTooltip !== tip) {
+            activeTooltip.classList.remove('visible');
+            activeTooltip.remove();
+          }
+          positionTooltip(term, tip);
+          requestAnimationFrame(() => tip.classList.add('visible'));
+          activeTooltip = tip;
+        });
+
+        term.addEventListener('mouseleave', () => {
+          tip.classList.remove('visible');
+          setTimeout(() => { if (!tip.classList.contains('visible')) tip.remove(); }, 150);
+          activeTooltip = null;
+        });
+
+        term.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (activeTooltip && activeTooltip !== tip) {
+            activeTooltip.classList.remove('visible');
+            activeTooltip.remove();
+          }
+          if (tip.classList.contains('visible')) {
+            tip.classList.remove('visible');
+            tip.remove();
+            activeTooltip = null;
+          } else {
+            positionTooltip(term, tip);
+            requestAnimationFrame(() => tip.classList.add('visible'));
+            activeTooltip = tip;
+          }
+        });
+      });
+
+      document.addEventListener('click', () => {
+        if (activeTooltip) {
+          activeTooltip.classList.remove('visible');
+          activeTooltip.remove();
+          activeTooltip = null;
+        }
+      });
+
+      // ===== QUIZ FUNCTIONS =====
+      window.selectOption = function(btn) {
+        const block = btn.closest('.quiz-question-block');
+        block.querySelectorAll('.quiz-option').forEach(o => o.classList.remove('selected'));
+        btn.classList.add('selected');
+      };
+
+      window.checkQuiz = function(containerId) {
+        const container = document.getElementById(containerId);
+        const questions = container.querySelectorAll('.quiz-question-block');
+        let correct = 0;
+
+        questions.forEach(q => {
+          const selected = q.querySelector('.quiz-option.selected');
+          const feedback = q.querySelector('.quiz-feedback');
+          const correctValue = q.dataset.correct;
+
+          if (!selected) {
+            feedback.textContent = 'Pick an answer first!';
+            feedback.className = 'quiz-feedback show warning';
+            return;
+          }
+
+          if (selected.dataset.value === correctValue) {
+            correct++;
+            selected.classList.add('correct');
+            feedback.innerHTML = '<strong>Exactly!</strong> You understand this concept.';
+            feedback.className = 'quiz-feedback show success';
+          } else {
+            selected.classList.add('incorrect');
+            q.querySelector(`[data-value="${correctValue}"]`).classList.add('correct');
+            feedback.innerHTML = '<strong>Not quite.</strong> The correct answer is highlighted.';
+            feedback.className = 'quiz-feedback show error';
+          }
+
+          q.querySelectorAll('.quiz-option').forEach(o => o.disabled = true);
+        });
+      };
+
+      window.resetQuiz = function(containerId) {
+        const container = document.getElementById(containerId);
+        container.querySelectorAll('.quiz-question-block').forEach(q => {
+          q.querySelectorAll('.quiz-option').forEach(o => {
+            o.classList.remove('selected', 'correct', 'incorrect');
+            o.disabled = false;
+          });
+          q.querySelector('.quiz-feedback').className = 'quiz-feedback';
+        });
+      };
+    })();
+  </script>
+</body>
+</html>
